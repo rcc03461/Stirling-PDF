@@ -29,7 +29,7 @@
                   <p th:utext="#{compress.selectText.1.1}"></p>
                   <label for="optimizeLevel" th:text="#{compress.selectText.2}"></label>
                   <select name="optimizeLevel" id="optimizeLevel" class="form-control">
-                    <option value="1">1</option>
+                    <!-- <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3">3</option>
                     <option value="4">4</option>
@@ -40,7 +40,15 @@
                     <option value="9">9</option>
                     <option value="10">10</option>
                     <option value="11">11</option>
-                    <option value="12">12</option>
+                    <option value="12">12</option> -->
+                    <option value="1" >300 dpi(color preserving)</option>
+                    <option value="2" >300 dpi</option>
+                    <option value="3" >150 dpi</option>
+                    <option selected value="5" >96 dpi</option>
+                    <option value="9" >72 dpi</option>
+                    <option value="10" >36 dpi</option>
+                    <option value="11" >18 dpi</option>
+                    <option value="12" >9 dpi</option>
                   </select>
 
                   <div class="form-check mt-3">

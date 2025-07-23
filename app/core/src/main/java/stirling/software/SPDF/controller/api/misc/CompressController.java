@@ -882,18 +882,6 @@ public class CompressController {
                 command.add("-dMonoImageResolution=200");
                 break;
             case 10:
-                // command.add("-dPDFSETTINGS=/screen");
-                command.add("-dColorImageResolution=72");
-                command.add("-dGrayImageResolution=72");
-                command.add("-dMonoImageResolution=150");
-                break;
-            case 11:
-                // command.add("-dPDFSETTINGS=/screen");
-                command.add("-dColorImageResolution=36");
-                command.add("-dGrayImageResolution=36");
-                command.add("-dMonoImageResolution=150");
-                break;
-            case 12:
                 command.add("-dPDFSETTINGS=/screen");
                 command.add("-dCompatibilityLevel=1.3");
                 command.add("-dEmbedAllFonts=true");
@@ -904,6 +892,30 @@ public class CompressController {
                 command.add("-dColorImageResolution=36");
                 command.add("-dGrayImageResolution=36");
                 command.add("-dMonoImageResolution=36");
+                break;
+            case 11:
+                command.add("-dPDFSETTINGS=/screen");
+                command.add("-dCompatibilityLevel=1.3");
+                command.add("-dEmbedAllFonts=true");
+                command.add("-dSubsetFonts=true");
+                command.add("-dColorImageDownsampleType=/Bicubic");
+                command.add("-dGrayImageDownsampleType=/Bicubic");
+                command.add("-dMonoImageDownsampleType=/Bicubic");
+                command.add("-dColorImageResolution=18");
+                command.add("-dGrayImageResolution=18");
+                command.add("-dMonoImageResolution=18");
+                break;
+            case 12:
+                command.add("-dPDFSETTINGS=/screen");
+                command.add("-dCompatibilityLevel=1.3");
+                command.add("-dEmbedAllFonts=true");
+                command.add("-dSubsetFonts=true");
+                command.add("-dColorImageDownsampleType=/Bicubic");
+                command.add("-dGrayImageDownsampleType=/Bicubic");
+                command.add("-dMonoImageDownsampleType=/Bicubic");
+                command.add("-dColorImageResolution=9");
+                command.add("-dGrayImageResolution=9");
+                command.add("-dMonoImageResolution=9");
                 break;
             default:
                 command.add("-dPDFSETTINGS=/screen");
