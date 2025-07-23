@@ -13,7 +13,7 @@
       <th:block th:insert="~{fragments/navbar.html :: navbar}"></th:block>
       <br><br>
       <div class="container">
-        <div class="row justify-content-center">
+        <div class="row justify-content-center compress-pdf-container" style="gap: 10px;">
           <div class="col-md-6 bg-card">
             <div class="tool-header">
               <span class="material-symbols-rounded tool-header-icon advance">zoom_in_map</span>
@@ -26,7 +26,10 @@
               <div class="card mb-3">
                 <div class="card-body">
                   <h4 th:text="#{compress.selectText.1}"></h4>
-                  <p th:utext="#{compress.selectText.1.1}"></p>
+                   <!-- <p th:utext="#{compress.selectText.1.1}"></p> -->
+                  <p>
+                    300 dpi(color preserving) , 300 dpi , 150 dpi , 96 dpi , 72 dpi , 36 dpi , 18 dpi , 9 dpi
+                  </p>
                   <label for="optimizeLevel" th:text="#{compress.selectText.2}"></label>
                   <select name="optimizeLevel" id="optimizeLevel" class="form-control">
                     <!-- <option value="1">1</option>
@@ -69,11 +72,23 @@
               <button type="submit" id="submitBtn" class="btn btn-primary" th:text="#{compress.submit}"></button>
             </form>
           </div>
+          <div class="col-md-6 bg-card">
+            <iframe src="https://doc.cre8corp.com" style="min-height: 600px;" width="100%" height="100%"></iframe>
+          </div>
         </div>
       </div>
     </div>
     <th:block th:insert="~{fragments/footer.html :: footer}"></th:block>
   </div>
 </body>
-
+<style>
+  .compress-pdf-container {
+    flex-wrap: nowrap !important;
+  }
+  @media (max-width: 768px) {
+    .compress-pdf-container {
+      flex-wrap: wrap !important;
+    }
+  }
+</style>
 </html>
