@@ -639,6 +639,8 @@ public class CompressController {
             case 8 -> 0.35;
             case 9 -> 0.25;
             case 10 -> 0.15;
+            case 11 -> 0.05;
+            case 12 -> 0.02;
             default -> 1.0;
         };
     }
@@ -654,6 +656,8 @@ public class CompressController {
             case 8 -> 0.50f;
             case 9 -> 0.35f;
             case 10 -> 0.2f;
+            case 11 -> 0.1f;
+            case 12 -> 0.05f;
             default -> 0.7f;
         };
     }
@@ -703,7 +707,7 @@ public class CompressController {
             boolean imageCompressionApplied = false;
             boolean externalCompressionApplied = false;
 
-            while (!sizeMet && optimizeLevel <= 9) {
+            while (!sizeMet && optimizeLevel <= 12) {
                 // Apply external compression first
                 if (!externalCompressionApplied) {
                     boolean ghostscriptSuccess = false;
@@ -755,6 +759,9 @@ public class CompressController {
                                 case 7 -> 0.7; // 70% of original size
                                 case 8 -> 0.65; // 65% of original size
                                 case 9 -> 0.5; // 50% of original size
+                                case 10 -> 0.4; // 40% of original size
+                                case 11 -> 0.3; // 30% of original size
+                                case 12 -> 0.2; // 20% of original size
                                 default -> 1.0;
                             };
 
@@ -763,7 +770,7 @@ public class CompressController {
                             compressImagesInPDF(
                                     currentFile,
                                     scaleFactor,
-                                    0.7f, // Default JPEG quality
+                                    0.1f, // Default JPEG quality
                                     Boolean.TRUE.equals(convertToGrayscale));
 
                     tempFiles.add(compressedImageFile);
@@ -844,7 +851,7 @@ public class CompressController {
         command.add("-dNOPAUSE");
         command.add("-dQUIET");
         command.add("-dBATCH");
-
+        // System.out.println("optimizeLevel: " + optimizeLevel);
         // Map optimization levels to Ghostscript settings
         switch (optimizeLevel) {
             case 1:
@@ -875,10 +882,28 @@ public class CompressController {
                 command.add("-dMonoImageResolution=200");
                 break;
             case 10:
-                command.add("-dPDFSETTINGS=/screen");
+                // command.add("-dPDFSETTINGS=/screen");
                 command.add("-dColorImageResolution=72");
                 command.add("-dGrayImageResolution=72");
                 command.add("-dMonoImageResolution=150");
+                break;
+            case 11:
+                // command.add("-dPDFSETTINGS=/screen");
+                command.add("-dColorImageResolution=36");
+                command.add("-dGrayImageResolution=36");
+                command.add("-dMonoImageResolution=150");
+                break;
+            case 12:
+                command.add("-dPDFSETTINGS=/screen");
+                command.add("-dCompatibilityLevel=1.3");
+                command.add("-dEmbedAllFonts=true");
+                command.add("-dSubsetFonts=true");
+                command.add("-dColorImageDownsampleType=/Bicubic");
+                command.add("-dGrayImageDownsampleType=/Bicubic");
+                command.add("-dMonoImageDownsampleType=/Bicubic");
+                command.add("-dColorImageResolution=36");
+                command.add("-dGrayImageResolution=36");
+                command.add("-dMonoImageResolution=36");
                 break;
             default:
                 command.add("-dPDFSETTINGS=/screen");
