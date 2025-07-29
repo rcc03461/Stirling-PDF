@@ -32,6 +32,18 @@
                   <input type="checkbox" id="addBorder" name="addBorder">
                   <label for="addBorder" th:text="#{pageLayout.addBorder}"></label>
                 </div>
+                <div class="mb-3">
+                  <label for="keepA4Pages" th:text="#{pageLayout.keepA4Pages}"></label>
+                  <input 
+                    type="text" 
+                    class="form-control" 
+                    id="keepA4Pages" 
+                    name="keepA4Pages" 
+                    th:placeholder="#{pageLayout.keepA4Pages.placeholder}"
+                    pattern="^[0-9,\s]*$"
+                    title="Enter page numbers separated by commas (e.g., 1,3,5)">
+                  <small class="form-text text-muted" th:text="#{pageLayout.keepA4Pages.help}"></small>
+                </div>
                 <button type="submit" id="submitBtn" class="btn btn-primary" th:text="#{pageLayout.submit}"></button>
               </form>
             </div>
@@ -40,5 +52,60 @@
       </div>
       <th:block th:insert="~{fragments/footer.html :: footer}"></th:block>
     </div>
+    
+    <script>
+      // JavaScript to show/hide A4 size options based on pagesPerSheet selection
+      document.addEventListener('DOMContentLoaded', function() {
+        const pagesPerSheetSelect = document.getElementById('pagesPerSheet');
+        const keepA4PagesDiv = document.querySelector('div:has(#keepA4Pages)');
+        
+        function toggleA4Options() {
+          const selectedValue = pagesPerSheetSelect.value;
+          const shouldShow = selectedValue === '2';
+          
+          if (keepA4PagesDiv) {
+            keepA4PagesDiv.style.display = shouldShow ? 'block' : 'none';
+          }
+        }
+        
+        // Initial setup
+        toggleA4Options();
+        
+        // Listen for changes
+        pagesPerSheetSelect.addEventListener('change', toggleA4Options);
+        
+        // Validate keepA4Pages input
+        const keepA4PagesInput = document.getElementById('keepA4Pages');
+        if (keepA4PagesInput) {
+          keepA4PagesInput.addEventListener('input', function(e) {
+            const value = e.target.value;
+            const isValid = /^[0-9,\s]*$/.test(value);
+            
+            if (!isValid) {
+              e.target.setCustomValidity('Please enter only numbers and commas (e.g., 1,3,5)');
+            } else {
+              e.target.setCustomValidity('');
+            }
+          });
+          
+          // Additional validation on form submit
+          const form = document.getElementById('multiPdfForm');
+          form.addEventListener('submit', function(e) {
+            const keepA4PagesValue = keepA4PagesInput.value.trim();
+            if (keepA4PagesValue) {
+              const pages = keepA4PagesValue.split(',').map(p => p.trim()).filter(p => p);
+              const invalidPages = pages.filter(p => !/^\d+$/.test(p) || parseInt(p) < 1);
+              
+              if (invalidPages.length > 0) {
+                e.preventDefault();
+                alert('Please enter valid page numbers (positive integers) separated by commas.');
+                keepA4PagesInput.focus();
+                return false;
+              }
+            }
+          });
+        }
+      });
+    </script>
   </body>
 </html>
