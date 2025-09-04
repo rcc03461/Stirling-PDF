@@ -262,7 +262,7 @@ public class MultiPageLayoutController {
                 sourcePageIndex + 1);
     }
 
-    /** 专门处理封面页的渲染导入方法 - 使用 PDFRenderer 保留所有复杂资源 */
+    /** 专门处理封面页的渲染导入方法 - 使用 PDFRenderer 配合 CropBox 保留所有复杂资源 */
     private boolean tryDirectImportForCover(
             PDDocument sourceDocument,
             PDDocument newDocument,
@@ -271,23 +271,124 @@ public class MultiPageLayoutController {
         File tempImageFile = null;
         try {
             PDPage sourcePage = sourceDocument.getPage(sourcePageIndex);
-            PDRectangle sourceRect = sourcePage.getMediaBox();
+            PDRectangle mediaBox = sourcePage.getMediaBox();
+            PDRectangle cropBox = sourcePage.getCropBox();
+
+            PDRectangle effectiveRect;
+            String boxType;
+
+            // 优先使用 CropBox，如果它存在且有效
+            if (cropBox != null && cropBox.getWidth() > 0 && cropBox.getHeight() > 0) {
+                // 检查 CropBox 是否明显小于 MediaBox（表示有超宽 artboard 问题）
+                float widthRatio = cropBox.getWidth() / mediaBox.getWidth();
+                if (widthRatio < 0.8f) { // CropBox 宽度明显小于 MediaBox，使用 CropBox
+                    effectiveRect = cropBox;
+                    boxType = "CropBox";
+                    log.debug(
+                            "Using CropBox for cover page: {}x{} (MediaBox: {}x{}, ratio: {})",
+                            cropBox.getWidth(),
+                            cropBox.getHeight(),
+                            mediaBox.getWidth(),
+                            mediaBox.getHeight(),
+                            String.format("%.2f", widthRatio));
+                } else {
+                    // CropBox 宽度接近 MediaBox，使用 MediaBox
+                    effectiveRect = mediaBox;
+                    boxType = "MediaBox";
+                    log.debug(
+                            "Using MediaBox for cover page (CropBox width ratio {} not significant): {}x{}",
+                            String.format("%.2f", widthRatio),
+                            mediaBox.getWidth(),
+                            mediaBox.getHeight());
+                }
+            } else {
+                // CropBox 不存在或无效，使用 MediaBox
+                effectiveRect = mediaBox;
+                boxType = "MediaBox";
+                log.debug(
+                        "Using MediaBox for cover page (CropBox not available): {}x{}",
+                        mediaBox.getWidth(),
+                        mediaBox.getHeight());
+            }
 
             log.debug(
-                    "Cover page rendering import: source size {}x{}, using PDFRenderer to preserve all complex resources",
-                    sourceRect.getWidth(),
-                    sourceRect.getHeight());
+                    "Cover page rendering import using {}: source size {}x{}, using PDFRenderer to preserve all complex resources",
+                    boxType,
+                    effectiveRect.getWidth(),
+                    effectiveRect.getHeight());
 
             // 使用 PDFRenderer 将封面页渲染成高质量图像
             PDFRenderer renderer = new PDFRenderer(sourceDocument);
             int dpi = 300; // 高质量渲染
-            BufferedImage image = renderer.renderImageWithDPI(sourcePageIndex, dpi);
+
+            // 注意：PDFRenderer 不支持直接指定渲染区域，我们渲染整页然后裁剪
+            BufferedImage fullImage = renderer.renderImageWithDPI(sourcePageIndex, dpi);
 
             log.debug(
-                    "Cover page rendered to image: {}x{} pixels at {} DPI",
+                    "Full page rendered: {}x{} pixels at {} DPI, will crop to {} area",
+                    fullImage.getWidth(),
+                    fullImage.getHeight(),
+                    dpi,
+                    boxType);
+
+            // 暫時跳過 CropBox 裁剪，先測試完整圖像顯示
+            BufferedImage image = fullImage;
+            log.debug(
+                    "Using full image for testing (skipping CropBox crop): {}x{}",
+                    image.getWidth(),
+                    image.getHeight());
+
+            // TODO: 如果完整圖像顯示正常，再重新啟用 CropBox 裁剪邏輯
+            /*
+            if (boxType.equals("CropBox")) {
+                // 计算缩放比例（从 PDF 坐标到图像像素）
+                float imageScaleX = fullImage.getWidth() / mediaBox.getWidth();
+                float imageScaleY = fullImage.getHeight() / mediaBox.getHeight();
+
+                // 计算裁剪区域在图像中的像素坐标
+                int cropX =
+                        Math.round(
+                                (cropBox.getLowerLeftX() - mediaBox.getLowerLeftX()) * imageScaleX);
+                int cropY =
+                        Math.round(
+                                (mediaBox.getUpperRightY() - cropBox.getUpperRightY())
+                                        * imageScaleY);
+                int cropWidth = Math.round(cropBox.getWidth() * imageScaleX);
+                int cropHeight = Math.round(cropBox.getHeight() * imageScaleY);
+
+                // 确保裁剪区域在图像范围内
+                cropX = Math.max(0, Math.min(cropX, fullImage.getWidth() - 1));
+                cropY = Math.max(0, Math.min(cropY, fullImage.getHeight() - 1));
+                cropWidth = Math.min(cropWidth, fullImage.getWidth() - cropX);
+                cropHeight = Math.min(cropHeight, fullImage.getHeight() - cropY);
+
+                // 裁剪图像到有效区域
+                image = fullImage.getSubimage(cropX, cropY, cropWidth, cropHeight);
+
+                log.debug(
+                        "Cropped image using CropBox: original {}x{} -> cropped {}x{} (crop area: x={}, y={}, w={}, h={})",
+                        fullImage.getWidth(),
+                        fullImage.getHeight(),
+                        image.getWidth(),
+                        image.getHeight(),
+                        cropX,
+                        cropY,
+                        cropWidth,
+                        cropHeight);
+            } else {
+                // 使用完整图像
+                image = fullImage;
+                log.debug(
+                        "Using full image (MediaBox): {}x{}", image.getWidth(), image.getHeight());
+            }
+            */
+
+            log.debug(
+                    "Cover page final image: {}x{} pixels at {} DPI using {}",
                     image.getWidth(),
                     image.getHeight(),
-                    dpi);
+                    dpi,
+                    boxType);
 
             // 创建临时文件保存图像
             tempImageFile = File.createTempFile("cover_page_", ".png");
@@ -297,8 +398,8 @@ public class MultiPageLayoutController {
                     "Cover page image saved to temporary file: {}",
                     tempImageFile.getAbsolutePath());
 
-            // 获取最优输出页面尺寸
-            PDRectangle outputPageSize = getOptimalOutputPageSize(sourceRect, true);
+            // 获取最优输出页面尺寸 - 基于有效区域而不是原始 MediaBox
+            PDRectangle outputPageSize = getOptimalOutputPageSize(effectiveRect, true);
 
             // 创建新页面
             PDPage outputPage = new PDPage(outputPageSize);
