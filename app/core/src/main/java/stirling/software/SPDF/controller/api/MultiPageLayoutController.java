@@ -1,12 +1,16 @@
 package stirling.software.SPDF.controller.api;
 
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import javax.imageio.ImageIO;
 
 import org.apache.pdfbox.multipdf.LayerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -16,6 +20,8 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -218,7 +224,19 @@ public class MultiPageLayoutController {
         // 分析页面内容
         analyzePageContent(sourcePage, sourcePageIndex);
 
-        // 方法1：使用LayerUtility（最可靠的方法）
+        // 特殊处理：封面页（第1页）直接使用 importPage，避免页面顺序问题和资源丢失
+        if (sourcePageIndex == 0) {
+            log.debug(
+                    "Processing cover page (page 1) with direct import to preserve complex resources and maintain correct order");
+            if (tryDirectImportForCover(sourceDocument, newDocument, sourcePageIndex, addBorder)) {
+                log.debug(
+                        "Successfully imported cover page directly - preserving all resources including background images");
+                return;
+            }
+            log.warn("Direct import for cover page failed, falling back to other methods");
+        }
+
+        // 其他页面使用LayerUtility方法
         if (tryLayerUtilityMethod(
                 sourceDocument, newDocument, layerUtility, sourcePageIndex, addBorder)) {
             log.debug("Successfully used LayerUtility method");
@@ -244,10 +262,141 @@ public class MultiPageLayoutController {
                 sourcePageIndex + 1);
     }
 
+    /** 专门处理封面页的渲染导入方法 - 使用 PDFRenderer 保留所有复杂资源 */
+    private boolean tryDirectImportForCover(
+            PDDocument sourceDocument,
+            PDDocument newDocument,
+            int sourcePageIndex,
+            boolean addBorder) {
+        File tempImageFile = null;
+        try {
+            PDPage sourcePage = sourceDocument.getPage(sourcePageIndex);
+            PDRectangle sourceRect = sourcePage.getMediaBox();
+
+            log.debug(
+                    "Cover page rendering import: source size {}x{}, using PDFRenderer to preserve all complex resources",
+                    sourceRect.getWidth(),
+                    sourceRect.getHeight());
+
+            // 使用 PDFRenderer 将封面页渲染成高质量图像
+            PDFRenderer renderer = new PDFRenderer(sourceDocument);
+            int dpi = 300; // 高质量渲染
+            BufferedImage image = renderer.renderImageWithDPI(sourcePageIndex, dpi);
+
+            log.debug(
+                    "Cover page rendered to image: {}x{} pixels at {} DPI",
+                    image.getWidth(),
+                    image.getHeight(),
+                    dpi);
+
+            // 创建临时文件保存图像
+            tempImageFile = File.createTempFile("cover_page_", ".png");
+            ImageIO.write(image, "PNG", tempImageFile);
+
+            log.debug(
+                    "Cover page image saved to temporary file: {}",
+                    tempImageFile.getAbsolutePath());
+
+            // 获取最优输出页面尺寸
+            PDRectangle outputPageSize = getOptimalOutputPageSize(sourceRect, true);
+
+            // 创建新页面
+            PDPage outputPage = new PDPage(outputPageSize);
+            newDocument.addPage(outputPage);
+
+            // 将图像添加到新页面
+            try (PDPageContentStream contentStream =
+                    new PDPageContentStream(
+                            newDocument,
+                            outputPage,
+                            PDPageContentStream.AppendMode.APPEND,
+                            true,
+                            true)) {
+
+                // 从文件创建图像对象
+                PDImageXObject imageXObject =
+                        PDImageXObject.createFromFileByExtension(tempImageFile, newDocument);
+
+                // 计算图像在页面上的位置和大小
+                float pageWidth = outputPageSize.getWidth();
+                float pageHeight = outputPageSize.getHeight();
+
+                // 计算缩放比例以适应页面，保持宽高比
+                float imageWidth = imageXObject.getWidth();
+                float imageHeight = imageXObject.getHeight();
+
+                float scaleX = pageWidth / imageWidth;
+                float scaleY = pageHeight / imageHeight;
+                float scale = Math.min(scaleX, scaleY); // 保持宽高比
+
+                float scaledWidth = imageWidth * scale;
+                float scaledHeight = imageHeight * scale;
+
+                // 居中定位
+                float x = (pageWidth - scaledWidth) / 2;
+                float y = (pageHeight - scaledHeight) / 2;
+
+                log.debug(
+                        "Drawing cover page image: position=({}, {}), size={}x{}, scale={}",
+                        x,
+                        y,
+                        scaledWidth,
+                        scaledHeight,
+                        scale);
+
+                // 绘制图像
+                contentStream.drawImage(imageXObject, x, y, scaledWidth, scaledHeight);
+
+                // 添加边框（如果需要）
+                if (addBorder) {
+                    contentStream.setLineWidth(1.0f);
+                    contentStream.setStrokingColor(Color.GRAY);
+                    contentStream.addRect(x, y, scaledWidth, scaledHeight);
+                    contentStream.stroke();
+                    log.debug("Border added to rendered cover page");
+                }
+            }
+
+            log.debug(
+                    "Cover page successfully rendered and imported - all complex resources preserved");
+            return true;
+
+        } catch (Exception e) {
+            log.debug("Cover page rendering import failed: {}", e.getMessage());
+            return false;
+        } finally {
+            // 清理临时文件
+            if (tempImageFile != null && tempImageFile.exists()) {
+                try {
+                    boolean deleted = tempImageFile.delete();
+                    if (deleted) {
+                        log.debug(
+                                "Temporary image file cleaned up: {}",
+                                tempImageFile.getAbsolutePath());
+                    } else {
+                        log.warn(
+                                "Failed to delete temporary image file: {}",
+                                tempImageFile.getAbsolutePath());
+                    }
+                } catch (Exception cleanupException) {
+                    log.warn(
+                            "Error during temporary file cleanup: {}",
+                            cleanupException.getMessage());
+                }
+            }
+        }
+    }
+
     /** 方法1：直接导入页面 */
     private boolean tryDirectImport(
             PDDocument sourceDocument, PDDocument newDocument, int sourcePageIndex) {
         try {
+            // 封面页应该已经通过 tryDirectImportForCover 处理，这里不应该处理封面页
+            if (sourcePageIndex == 0) {
+                log.warn("tryDirectImport should not be called for cover page (index 0)");
+                return false;
+            }
+
             PDPage sourcePage = sourceDocument.getPage(sourcePageIndex);
             PDRectangle sourceRect = sourcePage.getMediaBox();
 
@@ -310,10 +459,17 @@ public class MultiPageLayoutController {
             PDRectangle outputPageSize = getOptimalOutputPageSize(sourceRect, true);
 
             log.debug(
-                    "Source page is landscape: {}, Output size: {}x{}",
+                    "LayerUtility method for page {}: Source is landscape: {}, Output size: {}x{}",
+                    sourcePageIndex + 1,
                     sourceIsLandscape,
                     outputPageSize.getWidth(),
                     outputPageSize.getHeight());
+
+            // 注意：封面页應該已經通過 tryDirectImportForCover 處理，這裡不應該處理封面頁
+            if (sourcePageIndex == 0) {
+                log.warn("LayerUtility method should not be called for cover page (index 0)");
+                return false;
+            }
 
             // 创建输出页面
             PDPage outputPage = new PDPage(outputPageSize);
@@ -436,6 +592,12 @@ public class MultiPageLayoutController {
             int sourcePageIndex,
             boolean addBorder) {
         try {
+            // 封面页应该已经通过 tryDirectImportForCover 处理，这里不应该处理封面页
+            if (sourcePageIndex == 0) {
+                log.warn("tryContentStreamCopy should not be called for cover page (index 0)");
+                return false;
+            }
+
             PDPage sourcePage = sourceDocument.getPage(sourcePageIndex);
             PDRectangle sourceRect = sourcePage.getMediaBox();
 
